@@ -115,13 +115,13 @@ namespace NotificationService.SvCommon.Common
                 {
                     policy.Requirements.Add(new AppNameAuthorizeRequirement());
                 });
-                configure.AddPolicy(ApplicationConstants.AppAudienceAuthorizePolicy, policy =>
+                configure.AddPolicy(ApplicationConstants.AppIdAuthorizePolicy, policy =>
                 {
-                    policy.Requirements.Add(new AppAudienceAuthorizeRequirement());
+                    policy.Requirements.Add(new AppIdAuthorizeRequirement());
                 });
             });
             _ = services.AddSingleton<IAuthorizationHandler, AppNameAuthorizePolicyHandler>(s => new AppNameAuthorizePolicyHandler(s.GetService<IHttpContextAccessor>(), this.Configuration));
-            _ = services.AddSingleton<IAuthorizationHandler, AppAudienceAuthorizePolicyHandler>(s => new AppAudienceAuthorizePolicyHandler(s.GetService<IHttpContextAccessor>(), this.Configuration));
+            _ = services.AddSingleton<IAuthorizationHandler, AppIdAuthorizePolicyHandler>(s => new AppIdAuthorizePolicyHandler(s.GetService<IHttpContextAccessor>(), this.Configuration));
 
             _ = services.AddControllers();
 
@@ -157,11 +157,11 @@ namespace NotificationService.SvCommon.Common
 
             _ = services.AddAuthentication(ApplicationConstants.BearerAuthenticationScheme).AddJwtBearer(options =>
             {
-                options.Authority = this.Configuration[ConfigConstants.AuthorityConfigKey];
+                options.Authority = this.Configuration[ConfigConstants.BearerTokenIssuerConfigKey];
                 options.ClaimsIssuer = this.Configuration[ConfigConstants.BearerTokenIssuerConfigKey];
                 options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters()
                 {
-                    ValidateIssuer = true,
+                    ValidateIssuer = false,
                     ValidAudiences = this.Configuration[ConfigConstants.BearerTokenValidAudiencesConfigKey].Split(ApplicationConstants.SplitCharacter),
                 };
             });
