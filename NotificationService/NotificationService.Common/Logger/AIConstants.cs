@@ -1,4 +1,7 @@
-﻿namespace NotificationService.Common.Logger
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+namespace NotificationService.Common.Logger
 {
     /// <summary>
     /// AI logging constants class.
@@ -99,5 +102,20 @@
         /// DateRange for resend.
         /// </summary>
         public const string ResendDateRange = "ResendDateRange";
+
+        /// <summary>
+        /// Custom Event MailBox Exhausted.
+        /// </summary>
+        public const string CustomEventMailBoxExhausted = "Mail Box Limit Exhausted";
+
+        /// <summary>
+        /// Custom Event for send email notificaiton failure.
+        /// </summary>
+        public const string CustomEventMailSendFailed = "Mail Send Failed";
+
+        /// <summary>
+        /// Custom Event for send invite notificaiton failure.
+        /// </summary>
+        public const string CustomEventInviteSendFailed = "Meeting Invite Send Failed";
     }
 }

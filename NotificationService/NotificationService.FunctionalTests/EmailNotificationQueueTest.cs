@@ -17,6 +17,9 @@ namespace NotificationService.FunctionalTests
     {
 
         [Test]
+        /// <summary>
+        /// Test email queue, notificationMessage and notifications endpoints
+        /// </summary>
         public async Task QueueEmailGetNotificationMessageGetNotificationReportTest()
         {
             var emailNotificationItems = new EmailNotificationItem[]
@@ -66,12 +69,14 @@ namespace NotificationService.FunctionalTests
                         int delayTime = int.TryParse(Configuration[FunctionalConstants.DelayTimeInMilliSeconds], out delayTime) ? delayTime : 5000;
 
 
-                        for (int i = 0; i < retryCount; i++) {
+                        for (int i = 0; i < retryCount; i++)
+                        {
                             NotificationReportResponse notificationReportResponse = await GetNotificationReportTest(notificationId, httpClient);
                             if (notificationReportResponse != null)
                             {
                                 NotificationItemStatus notificationItemStatus = Enum.TryParse<NotificationItemStatus>(notificationReportResponse.Status, out notificationItemStatus) ? notificationItemStatus : NotificationItemStatus.Queued;
-                                switch (notificationItemStatus) {
+                                switch (notificationItemStatus)
+                                {
                                     case NotificationItemStatus.Failed:
                                     case NotificationItemStatus.FakeMail:
                                     case NotificationItemStatus.Invalid:
@@ -114,10 +119,16 @@ namespace NotificationService.FunctionalTests
             }
         }
 
+        /// <summary>
+        /// calls the email notifications report endpoint.
+        /// </summary>
+        /// <param name="notificationId">notificationId .</param>
+        /// <param name="httpClient">httpClient object .</param>
+        /// <returns>NotificationReportResponse corresponding to the notificationId</returns>
         private async Task<NotificationReportResponse> GetNotificationReportTest(string notificationId, HttpClient httpClient)
         {
             NotificationReportResponse reportResponse = null;
-         
+
             var reqcontent = "{\"applicationFilter\":[\"" + this.Configuration[FunctionalConstants.Application] + "\"], \"notificationIdsFilter\":[\"" + notificationId + "\"] }";
             var stringContent = new StringContent(reqcontent, Encoding.UTF8, FunctionalConstants.ContentType);
 
@@ -137,6 +148,12 @@ namespace NotificationService.FunctionalTests
             return reportResponse;
         }
 
+        /// <summary>
+        /// calls the email notificationMessage report endpoint to get the message including body
+        /// </summary>
+        /// <param name="notificationId">notificationId .</param>
+        /// <param name="httpClient">httpClient object .</param>
+        /// <returns>EmailMessage corresponding to the notificationId</returns>
         private async Task<EmailMessage> GetNotificationMessageTest(string notificationId, HttpClient httpClient)
         {
             EmailMessage emailMessage = null;
@@ -155,6 +172,9 @@ namespace NotificationService.FunctionalTests
         }
 
         [Test]
+        /// <summary>
+        /// Test email attachment through queue endpoint
+        /// </summary>
         public async Task QueueEmailAttachmentGetNotificationTest()
         {
             var emailNotificationItems = new EmailNotificationItem[]

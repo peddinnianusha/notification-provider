@@ -9,6 +9,7 @@ namespace NotificationHandler.Controllers
     using Microsoft.AspNetCore.Authorization;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Azure.Cosmos.Table;
+    using NotificationHandler.Controllers.V1;
     using NotificationService.BusinessLibrary;
     using NotificationService.BusinessLibrary.Interfaces;
     using NotificationService.Common;
@@ -22,13 +23,8 @@ namespace NotificationHandler.Controllers
     [Route("v1/report")]
     [Authorize(AuthenticationSchemes = ApplicationConstants.BearerAuthenticationScheme)]
     [ServiceFilter(typeof(ValidateModelAttribute))]
-    public class NotificationReportController : Controller
+    public class NotificationReportController : BaseController
     {
-        /// <summary>
-        /// Instance of <see cref="ILogger"/>.
-        /// </summary>
-        private readonly ILogger logger;
-
         /// <summary>
         /// Instance of <see cref="INotificationReportManager"/>.
         /// </summary>
@@ -42,9 +38,9 @@ namespace NotificationHandler.Controllers
         public NotificationReportController(
             INotificationReportManager notificationReportManager,
             ILogger logger)
+            : base(logger)
         {
             this.notificationReportManager = notificationReportManager ?? throw new System.ArgumentNullException(nameof(notificationReportManager));
-            this.logger = logger ?? throw new System.ArgumentNullException(nameof(logger));
         }
 
         /// <summary>
@@ -202,16 +198,49 @@ namespace NotificationHandler.Controllers
         }
 
         /// <summary>
-        /// Logs and rethrow the exception.
+        /// Returns Meeting Invite Message for reporting.
         /// </summary>
-        /// <param name="message">Error message.</param>
-        /// <param name="inputName">Name of input type.</param>
-        /// <param name="traceProps">custom properties, add more dimensions to this, so it will be easy to trace and query.</param>
-        private void LogAndThrowArgumentNullException(string message, string inputName, Dictionary<string, string> traceProps)
+        /// <param name="applicationName">Application.</param>
+        /// <param name="notificationId">notificationId of the email notification.</param>
+        /// <returns>A <see cref="EmailMessage"/> returns the notification Message.</returns>
+        [HttpGet]
+        [Authorize(Policy = ApplicationConstants.AppIdAuthorizePolicy)]
+        [Route("meetingMessage/{applicationName}/{notificationId}")]
+        public async Task<IActionResult> GetMeetingNotificationMessage(string applicationName, string notificationId)
         {
-            var argumentException = new System.ArgumentNullException(inputName, message);
-            this.logger.TraceInformation(argumentException.Message, traceProps);
-            throw argumentException;
+            try
+            {
+                var traceProps = new Dictionary<string, string>();
+                if (string.IsNullOrWhiteSpace(applicationName))
+                {
+                    this.LogAndThrowArgumentNullException("Application Name cannot be null or empty.", nameof(applicationName), traceProps);
+                }
+
+                traceProps[AIConstants.Application] = applicationName;
+                if (string.IsNullOrWhiteSpace(notificationId))
+                {
+                    this.LogAndThrowArgumentNullException("notificationId should not be empty", nameof(notificationId), traceProps);
+                }
+
+                this.logger.TraceInformation($"Started {nameof(this.GetMeetingNotificationMessage)} method of {nameof(NotificationReportController)}.");
+                var emailMessage = await this.notificationReportManager.GetMeetingNotificationMessage(applicationName, notificationId).ConfigureAwait(false);
+
+                this.logger.TraceInformation($"Finished {nameof(this.GetMeetingNotificationMessage)} method of {nameof(NotificationReportController)}.");
+                return new OkObjectResult(emailMessage);
+            }
+            catch (ArgumentNullException agNullEx)
+            {
+                return this.BadRequest(agNullEx.Message);
+            }
+            catch (ArgumentException agEx)
+            {
+                return this.BadRequest(agEx.Message);
+            }
+            catch (Exception ex)
+            {
+                this.logger.WriteException(ex);
+                throw;
+            }
         }
     }
 }

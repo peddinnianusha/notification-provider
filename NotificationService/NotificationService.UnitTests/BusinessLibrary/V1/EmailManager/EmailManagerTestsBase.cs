@@ -6,17 +6,18 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
     using System;
     using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
+    using System.Net;
     using System.Net.Http.Headers;
     using System.Threading.Tasks;
-    using Microsoft.AspNetCore.DataProtection;
     using Microsoft.Azure.Storage.Queue;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.Options;
     using Moq;
     using Newtonsoft.Json;
     using NotificationService.BusinessLibrary;
-    using NotificationService.BusinessLibrary.Business.v1;
+    using NotificationService.BusinessLibrary.Business.V1;
     using NotificationService.BusinessLibrary.Interfaces;
+    using NotificationService.BusinessLibrary.Models;
     using NotificationService.BusinessLibrary.Providers;
     using NotificationService.Common;
     using NotificationService.Common.Configurations;
@@ -154,6 +155,15 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
         public MSGraphNotificationProvider MSGraphNotificationProvider { get; set; }
 
         /// <summary>
+        /// Mocked response data.
+        /// </summary>
+#pragma warning disable SA1201 // Elements should appear in the correct order
+#pragma warning disable SA1401 // Fields should be private
+        protected ResponseData<string> response;
+#pragma warning restore SA1401 // Fields should be private
+#pragma warning restore SA1201 // Elements should appear in the correct order
+
+        /// <summary>
         /// Initialization for all Email Manager Tests.
         /// </summary>
         protected void SetupTestBase()
@@ -247,6 +257,13 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
                 TemplateType = "Text",
             };
 
+            this.response = new ResponseData<string>()
+            {
+                Status = true,
+                Result = "successful",
+                StatusCode = HttpStatusCode.OK,
+            };
+
             this.Configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(testConfigValues)
                 .Build();
@@ -265,7 +282,7 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(It.IsAny<bool>()));
+                .Returns(Task.FromResult(this.response));
 
             _ = this.EmailNotificationRepository
                 .Setup(repository => repository.GetRepository(StorageType.StorageAccount).CreateEmailNotificationItemEntities(It.IsAny<IList<EmailNotificationItemEntity>>(), It.IsAny<string>()))

@@ -9,13 +9,8 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
     using System.Net;
     using System.Net.Http.Headers;
     using System.Threading.Tasks;
-    using Azure;
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Options;
     using Moq;
     using Newtonsoft.Json;
-    using NotificationService.BusinessLibrary.Business.v1;
-    using NotificationService.BusinessLibrary.Interfaces;
     using NotificationService.BusinessLibrary.Models;
     using NotificationService.BusinessLibrary.Providers;
     using NotificationService.Common;
@@ -23,7 +18,6 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
     using NotificationService.Contracts;
     using NotificationService.Contracts.Entities;
     using NotificationService.Contracts.Models.Graph.Invite;
-    using NotificationService.Data;
     using NUnit.Framework;
 
     /// <summary>
@@ -129,7 +123,7 @@ namespace NotificationService.UnitTests.BusinessLibrary.V1.EmailManager
             var res = new ResponseData<string>()
             {
                 Status = false,
-                StatusCode = HttpStatusCode.BadRequest,
+                StatusCode = HttpStatusCode.TooManyRequests,
             };
             _ = this.TokenHelper.Setup(x => x.GetAuthenticationHeaderValueForSelectedAccount(It.IsAny<AccountCredential>())).ReturnsAsync(new AuthenticationHeaderValue("test"));
             _ = this.MsGraphProvider.Setup(x => x.SendMeetingInvite(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<InvitePayload>(), It.IsAny<string>())).ReturnsAsync(res);

@@ -5,17 +5,23 @@ import React, { useEffect, useState } from 'react';
 import { useBoolean } from '@uifabric/react-hooks';
 import {
     SelectionMode, ShimmeredDetailsList, ConstrainMode, Link, ScrollablePane, ScrollbarVisibility, ActionButton,
-    Sticky, StickyPositionType, Selection, MarqueeSelection, mergeStyleSets, Stack
+    Sticky, StickyPositionType, Selection, mergeStyleSets, Stack
 } from 'office-ui-fabric-react';
 import { getMailHistory, viewMailBody, getApplications } from "../services";
 import ResendModal from './resendModal';
 import { CoherencePagination } from '@cseo/controls';
 import ViewMailModal from './viewMailModal';
 import MailHistoryFilter from './mailHistoryFilter';
+import {_Styles} from './PageStyles';
+import {copyToClipboard} from '../utils';
+import {ToastContainer} from 'react-toastify';
+import { AppConstants } from './constants';
+import 'react-toastify/dist/ReactToastify.css';
+
 
 const DEFAULT_PAGE_SIZE = 100;
 const TOTAL_RECORDS = 10000;
-export default function MailHistory() {
+export default function MailHistory(propertis) {
 
     const [hideDialog, { toggle: toggleHideDialog }] = useBoolean(true);
 
@@ -59,11 +65,6 @@ export default function MailHistory() {
         }
     };
 
-    const onPageSizeChange = (newPageSize) => {
-        defaultPageSize.current = newPageSize;
-        selectedPage.current = 1;
-        fetchMailHistory(filter, null, defaultPageSize.current);
-    }
     const paginationProps = {
         pageCount: pageCount.current,
         selectedPage: selectedPage.current,
@@ -73,18 +74,6 @@ export default function MailHistory() {
         
         onPageChange: onPageChange
     };
-    const paginationPageSizeProps = {
-        pageSize: defaultPageSize.current,
-        pageSizeList: [
-            { key: 100, text: '1000' },
-            { key: 200, text: '2000' },
-            { key: 300, text: '3000' },
-            { key: 400, text: '4000' },
-            { key: 500, text: '5000' }
-        ],
-        comboBoxAriaLabel: 'page size',
-        onPageSizeChange: onPageSizeChange
-    };
 
     useEffect(() => {
         fetchApplicationNames();
@@ -93,7 +82,7 @@ export default function MailHistory() {
     const fetchApplicationNames = () => {
         getApplications().then(res => {
             var apps = res?.data.map((o,i)=> {return {key:o, text: o};});
-            filterProperties.push({ key: 4, text: "Application", selector:"ComboBox", value: apps, placeholder: "Select value", isList: true})
+            filterProperties.push({ key: 4, text: "Application", selector:"ComboBox", value: apps, placeholder: AppConstants.PlaceholderSelectValue, isList: true})
             setFilterProps(filterProperties);
             applications = res?.data;
             setApplicationName(applications?.[0]);
@@ -146,7 +135,7 @@ export default function MailHistory() {
             name: item,
             fieldName: fieldNames[index],
             minWidth: 10,
-            maxWidth: 140,
+            maxWidth: 120,
             isResizable: true,
             isHeader:true
 
@@ -154,10 +143,10 @@ export default function MailHistory() {
 
     const overflowCol = {
         key: 'column',
-        name: "",
+        name: "Action",
         fieldName: "Action",
         minWidth: 50,
-        maxWidth: 100,
+        maxWidth: 80,
         isResizable: true,
         onRender: () => {
             return <Link
@@ -187,12 +176,12 @@ export default function MailHistory() {
     }
 
     const filterProperties = [
-        { key: 0, text: "NotificationId", selector: "InputBox", value: [], placeholder: "Type comma separated values", isList:true},
+        { key: 0, text: "NotificationId", selector: "InputBox", value: [], placeholder: AppConstants.PlaceholderCommaSeparated, isList:true},
         { key: 1, text: "Status", selector: "ComboBox", value: [{ key: 0, text: "Queued" }, { key: 1, text: "Processing" },
-            { key: 2, text: "Retrying" }, { key: 3, text: "Failed" }, { key: 4, text: "Sent" },], placeholder: "Select values", isList:true
+            { key: 2, text: "Retrying" }, { key: 3, text: "Failed" }, { key: 4, text: "Sent" },], placeholder: AppConstants.PlaceholderSelectValue, isList:true
         },
-        { key: 2, text: "SentOnStart", selector: "InputBox", value: [], placeholder: "YYYY-MM-DDTHH:MM:SS", isList:false},
-        { key: 3, text: "SentOnEnd", selector: "InputBox", value: [], placeholder: "YYYY-MM-DDTHH:MM:SS", isList:false}
+        { key: 2, text: "SentOnStart", selector: "InputBox", value: [], placeholder: AppConstants.PlaceholderDateFormat, isList:false},
+        { key: 3, text: "SentOnEnd", selector: "InputBox", value: [], placeholder: AppConstants.PlaceholderDateFormat, isList:false}
     ];
 
     const operatorItems = [{ key: 0, text: "==" }];
@@ -229,11 +218,12 @@ export default function MailHistory() {
         setLoader(true);
         setMailBody(undefined);
         setMailDialog(!mailDialog);
-        if (mailDialog === true && activeItem.status === "Sent") {
+        if (mailDialog === true) {
             viewMailBody(activeItem?.application, activeItem?.notificationId).then((response) => {
-                setMailBody(response.data.body.content);
+                setMailBody(response?.data?.body?.content);
                 setLoader(false);
-            }).catch(error => {
+            }).catch((error) => {
+                setMailBody(AppConstants.NotificationBodyLoadFailed);
                 setLoader(false);
             })
         } else {
@@ -242,6 +232,7 @@ export default function MailHistory() {
     }
 
     return (
+        <ScrollablePane className={propertis.isNavCollapsed ? _Styles.scrollablePaneCollapsed : _Styles.scrollablePaneExpand}>
         <div>
             <Sticky >
 
@@ -270,8 +261,8 @@ export default function MailHistory() {
 
             </Sticky>
             <div style={{ position: 'relative', height: "76vh" }}>
+                <ToastContainer style= {{width: "162px"}}/>
                 <ScrollablePane className={classNames.header} scrollbarVisibility={ScrollbarVisibility.auto}>
-                    <MarqueeSelection selection={selection}>
                         <ShimmeredDetailsList
                             setAllSelected='false'
                             selection={selection}
@@ -287,14 +278,16 @@ export default function MailHistory() {
                             onRenderDetailsHeader={onRenderDetailsHeader}
                             onActiveItemChanged={onActiveItemChanged}
                             selectionMode={SelectionMode.multiple}
+                            onItemInvoked = {copyToClipboard}
                         />
-                    </MarqueeSelection>
                 </ScrollablePane>
                 <ResendModal
                     toggleHideDialog={toggleHideDialog}
                     hideDialog={hideDialog}
                     selectedItem={selectedItem}
                     application = {applicationName}
+                    title="Resend Emails"
+                    notificationType = "Mail"
                 />
                 <ViewMailModal
                     toggleMailDialog={toggleViewMailDialog}
@@ -314,5 +307,6 @@ export default function MailHistory() {
                 </Stack>
             </Stack>
         </div>
+        </ScrollablePane>
     )
 }

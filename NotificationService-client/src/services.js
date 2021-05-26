@@ -23,6 +23,12 @@ export  function resendEmailService(applicationName, notificationIds) {
     return instance.post(url, notificationIds)
 };
 
+export  function resendMeetingService(applicationName, notificationIds) {
+    const params = {"applicationName": applicationName};
+    const url = formatString(config.serviceEndpoints.resendMeetingEndpoint, params);
+    return instance.post(url, notificationIds)
+};
+
 export function viewMailBody(applicationName, notificationId) {
     const params = {"applicationName":applicationName, "notificationId":notificationId}
     const url = formatString(config.serviceEndpoints.viewMailBodyEndpoint, params);
@@ -45,4 +51,15 @@ const prepareReqBody = (token,filter) => {
           token:token
     }
     return reqBody;
+}
+
+export  function getMeetingHistory(applicationName, token, filter) {
+    var reqBody = prepareReqBody(applicationName,token,filter);
+    return instance.post(config.serviceEndpoints.meetingHistoryEndpoint,reqBody,{headers:{Authorization:""}});
+};
+
+export function getMeetingBody(applicationName, notificationId){
+    const params = {"applicationName":applicationName, "notificationId":notificationId}
+    const url = formatString(config.serviceEndpoints.viewMeetingBodyEndpoint, params);
+    return instance.get(url);
 }

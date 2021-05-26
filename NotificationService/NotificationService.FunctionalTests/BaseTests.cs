@@ -4,14 +4,12 @@
 namespace NotificationService.FunctionalTests
 {
     using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Configuration.AzureAppConfiguration;
-    using Microsoft.Extensions.Configuration.AzureKeyVault;
     using Microsoft.Extensions.DependencyInjection;
-    using NotificationService.Common.Configurations;
     using NUnit.Framework;
-    using System;
-    using System.Globalization;
 
+    /// <summary>
+    /// Base class for all functional tests
+    /// </summary>
 
     public class BaseTests
     {
@@ -39,7 +37,7 @@ namespace NotificationService.FunctionalTests
 
         public static IConfiguration InitConfiguration()
         {
-            
+
             var builder = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json");
 

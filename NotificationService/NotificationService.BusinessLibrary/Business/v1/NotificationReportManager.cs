@@ -16,6 +16,7 @@ namespace NotificationService.BusinessLibrary
     using NotificationService.Contracts;
     using NotificationService.Contracts.Entities;
     using NotificationService.Contracts.Extensions;
+    using NotificationService.Contracts.Models.Reports;
     using NotificationService.Data;
     using NotificationService.Data.Interfaces;
 
@@ -59,25 +60,28 @@ namespace NotificationService.BusinessLibrary
         /// </summary>
         private readonly ITemplateMerge templateMerge;
 
-
         /// <summary>
         /// Initializes a new instance of the <see cref="NotificationReportManager"/> class.
-        /// <param name="logger">An instance of <see cref="ILogger"/>.</param>
-        /// <param name="repositoryFactory">An instance of <see cref="IRepositoryFactory"/>.</param>
-        /// <param name="configuration">An instance of <see cref="IConfiguration"/>.</param>
-        /// <param name="emailManager">An instance of <see cref="EmailManager"/>.</param>
-        /// <param name="mailTemplateRepository">An instance of <see cref="IMailTemplateRepository"/>.</param>
+        /// </summary>
+        /// <param name="logger">The logger.</param>
+        /// <param name="repositoryFactory">The repository factory.</param>
+        /// <param name="configuration">The configuration.</param>
+        /// <param name="mailTemplateRepository">The mail template repository.</param>
+        /// <param name="templateManager">The template manager.</param>
+        /// <param name="templateMerge">The template merge.</param>
+        /// <exception cref="Exception">Unknown Database Type.</exception>
+        /// <exception cref="System.ArgumentNullException">mailTemplateRepository.</exception>
         public NotificationReportManager(
             ILogger logger,
             IRepositoryFactory repositoryFactory,
             IConfiguration configuration,
             IMailTemplateRepository mailTemplateRepository,
-            IMailTemplateManager templateManager, 
+            IMailTemplateManager templateManager,
             ITemplateMerge templateMerge)
         {
             this.logger = logger;
             this.configuration = configuration;
-            this.emailNotificationRepository = this.emailNotificationRepository = repositoryFactory.GetRepository(Enum.TryParse<StorageType>(this.configuration?[ConfigConstants.StorageType], out this.repo) ? this.repo : throw new Exception("Unknown Database Type"));
+            this.emailNotificationRepository = repositoryFactory?.GetRepository(Enum.TryParse<StorageType>(this.configuration?[ConfigConstants.StorageType], out this.repo) ? this.repo : throw new Exception("Unknown Database Type"));
             this.templateManager = templateManager;
             this.templateMerge = templateMerge;
             this.mailTemplateRepository = mailTemplateRepository ?? throw new System.ArgumentNullException(nameof(mailTemplateRepository));
@@ -89,7 +93,7 @@ namespace NotificationService.BusinessLibrary
             // Map the request object to filters
             if (notificationReportRequest == null)
             {
-                throw new ArgumentNullException($"The Notification Report Request cannot be null");
+                throw new ArgumentNullException($"{nameof(notificationReportRequest)}");
             }
 
             var emailNotificationItemEntities = await this.emailNotificationRepository.GetEmailNotifications(notificationReportRequest).ConfigureAwait(false);
@@ -124,7 +128,7 @@ namespace NotificationService.BusinessLibrary
                 }
                 else
                 {
-                    throw new ArgumentNullException("Null entity found for the input notification id: ", notificationId);
+                    throw new ArgumentNullException(notificationId, "No Email entity found for the input notification id: ");
                 }
             }
             catch (Exception ex)
@@ -140,7 +144,7 @@ namespace NotificationService.BusinessLibrary
             // Map the request object to filters
             if (notificationReportRequest == null)
             {
-                throw new ArgumentNullException($"The Notification Report Request cannot be null");
+                throw new ArgumentNullException($"{nameof(notificationReportRequest)}");
             }
 
             var meetingNotificationItemEntities = await this.emailNotificationRepository.GetMeetingInviteNotifications(notificationReportRequest).ConfigureAwait(false);
@@ -155,7 +159,6 @@ namespace NotificationService.BusinessLibrary
             return tuple;
         }
 
-
         /// <inheritdoc/>
         public async Task<IList<MailTemplateInfo>> GetAllTemplateEntities(string applicationName)
         {
@@ -165,7 +168,7 @@ namespace NotificationService.BusinessLibrary
                 IList<MailTemplateEntity> mailTemplateEntities = await this.mailTemplateRepository.GetAllTemplateEntities(applicationName).ConfigureAwait(false);
                 IList<MailTemplateInfo> mailTemplatesInfo = new List<MailTemplateInfo>();
                 foreach (var item in mailTemplateEntities)
-                    {
+                {
                     mailTemplatesInfo.Add(item.ToTemplateInfoContract());
                 }
 
@@ -189,6 +192,35 @@ namespace NotificationService.BusinessLibrary
             return applications;
         }
 
+        /// <inheritdoc/>
+        public async Task<MeetingInviteMessage> GetMeetingNotificationMessage(string applicationName, string notificationId)
+        {
+            var traceprops = new Dictionary<string, string>();
+            traceprops[AIConstants.Application] = applicationName;
+            traceprops[AIConstants.NotificationIds] = notificationId;
+            this.logger.TraceInformation($"Started {nameof(this.GetNotificationMessage)} method in {nameof(NotificationReportManager)}.", traceprops);
+            try
+            {
+                MeetingNotificationItemEntity notification = await this.emailNotificationRepository.GetMeetingNotificationItemEntity(notificationId, applicationName).ConfigureAwait(false);
+
+                if (notification != null)
+                {
+                    MessageBody body = await this.GetNotificationMessageBodyAsync(applicationName, notification).ConfigureAwait(false);
+                    this.logger.TraceInformation($"Completed {nameof(this.GetNotificationMessage)} method in {nameof(NotificationReportManager)}.", traceprops);
+                    return notification.ToMeetingInviteReportMessage(body);
+                }
+                else
+                {
+                    throw new ArgumentNullException(notificationId, "No MeetingInvite entity found for the input notification id: ");
+                }
+            }
+            catch (Exception ex)
+            {
+                this.logger.WriteException(ex);
+                throw;
+            }
+        }
+
         /// <summary>
         /// Get Notification Message Body Async.
         /// </summary>
@@ -207,8 +239,27 @@ namespace NotificationService.BusinessLibrary
         /// or
         /// Template cannot be found, please provide a valid template and application name.
         /// </exception>
-        private async Task<MessageBody> GetNotificationMessageBodyAsync(string applicationName, EmailNotificationItemEntity notification)
+        private async Task<MessageBody> GetNotificationMessageBodyAsync(string applicationName, NotificationItemBaseEntity notification)
         {
+            string body = string.Empty;
+            string templateId = string.Empty;
+            string templateData = string.Empty;
+
+            if (notification is EmailNotificationItemEntity)
+            {
+                var notifEntity = (EmailNotificationItemEntity)notification;
+                body = notifEntity.Body;
+                templateId = notifEntity.TemplateId;
+                templateData = notifEntity.TemplateData;
+            }
+            else
+            {
+                var notifEntity = (MeetingNotificationItemEntity)notification;
+                body = notifEntity.Body;
+                templateId = notifEntity.TemplateId;
+                templateData = notifEntity.TemplateData;
+            }
+
             this.logger.TraceInformation($"Started {nameof(this.GetNotificationMessageBodyAsync)} method of {nameof(EmailManager)}.");
             string notificationBody = null;
             try
@@ -223,21 +274,21 @@ namespace NotificationService.BusinessLibrary
                     throw new ArgumentNullException(nameof(notification), "notification cannot be null.");
                 }
 
-                if (string.IsNullOrEmpty(notification.Body) && !string.IsNullOrEmpty(notification.TemplateId))
+                if (string.IsNullOrEmpty(body) && !string.IsNullOrEmpty(templateId))
                 {
-                    MailTemplate template = await this.templateManager.GetMailTemplate(applicationName, notification.TemplateId).ConfigureAwait(false);
+                    MailTemplate template = await this.templateManager.GetMailTemplate(applicationName, templateId).ConfigureAwait(false);
                     if (template == null)
                     {
                         throw new ArgumentException("Template cannot be found, please provide a valid template and application name");
                     }
 
-                    notificationBody = this.templateMerge.CreateMailBodyUsingTemplate(template.TemplateType, template.Content, notification.TemplateData);
+                    notificationBody = this.templateMerge.CreateMailBodyUsingTemplate(template.TemplateType, template.Content, templateData);
                 }
                 else
                 {
-                    if (!string.IsNullOrEmpty(notification.Body))
+                    if (!string.IsNullOrEmpty(body))
                     {
-                        notificationBody = notification.Body;
+                        notificationBody = body;
                     }
                 }
             }

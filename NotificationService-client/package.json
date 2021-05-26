@@ -12,11 +12,15 @@
     "office-ui-fabric-react": "^7.164.1",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
-    "react-scripts": "^4.0.3"
+    "react-router": "^4.3.1",
+    "react-router-dom": "^4.3.1",
+    "react-scripts": "^4.0.3",
+    "react-toastify": "^7.0.3"
   },
   "resolutions": {
     "immer": "8.0.1",
-    "react-dev-utils": "^11.0.4"
+    "react-dev-utils": "^11.0.4",
+    "postcss-svgo": "^4.0.3"
   },
   "scripts": {
     "preinstall": "npx npm-force-resolutions",

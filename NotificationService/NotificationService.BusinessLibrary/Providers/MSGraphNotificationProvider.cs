@@ -113,7 +113,7 @@ namespace NotificationService.BusinessLibrary.Providers
 
         /// <inheritdoc/>
         public async Task ProcessNotificationEntities(string applicationName, IList<EmailNotificationItemEntity> notificationEntities)
-         {
+        {
             if (notificationEntities is null || notificationEntities.Count == 0)
             {
                 throw new ArgumentNullException(nameof(notificationEntities), "notificationEntities are null.");
@@ -158,6 +158,59 @@ namespace NotificationService.BusinessLibrary.Providers
             this.logger.TraceInformation($"Finished {nameof(this.ProcessNotificationEntities)} method of {nameof(MSGraphNotificationProvider)}.", traceProps);
         }
 
+        /// <inheritdoc/>
+        public async Task ProcessMeetingNotificationEntities(string applicationName, IList<MeetingNotificationItemEntity> meetingInviteEntities)
+        {
+            var traceProps = new Dictionary<string, string>();
+            traceProps[AIConstants.Application] = applicationName;
+            this.logger.TraceInformation($"Started {nameof(this.ProcessMeetingNotificationEntities)} method of {nameof(MSGraphNotificationProvider)}.", traceProps);
+            if (meetingInviteEntities is null || meetingInviteEntities.Count == 0)
+            {
+                throw new ArgumentNullException(nameof(meetingInviteEntities), "meetingInviteEntities are null/empty.");
+            }
+
+            traceProps[AIConstants.EmailNotificationCount] = meetingInviteEntities?.Count.ToString(CultureInfo.InvariantCulture);
+            var applicationFromAddress = this.applicationAccounts.Find(a => a.ApplicationName == applicationName).FromOverride;
+            AccountCredential selectedAccountCreds = this.emailAccountManager.FetchAccountToBeUsedForApplication(applicationName, this.applicationAccounts);
+            AuthenticationHeaderValue authenticationHeaderValue = await this.tokenHelper.GetAuthenticationHeaderValueForSelectedAccount(selectedAccountCreds).ConfigureAwait(false);
+            Tuple<AuthenticationHeaderValue, AccountCredential> selectedAccount = new Tuple<AuthenticationHeaderValue, AccountCredential>(authenticationHeaderValue, selectedAccountCreds);
+            this.logger.TraceVerbose($"applicationFromAddress: {applicationFromAddress}", traceProps);
+            meetingInviteEntities.ToList().ForEach(nie => nie.From = applicationFromAddress);
+
+            if (authenticationHeaderValue == null)
+            {
+                foreach (var item in meetingInviteEntities)
+                {
+                    item.Status = NotificationItemStatus.Failed;
+                    item.ErrorMessage = $"Could not retrieve authentication token with selected account:{selectedAccount.Item2?.AccountName} for the application:{applicationName}.";
+                }
+            }
+            else
+            {
+                string emailAccountUsed = selectedAccount.Item2.AccountName;
+                await this.ProcessMeetingEntitiesIndividually(applicationName, meetingInviteEntities, selectedAccount).ConfigureAwait(false);
+            }
+
+            this.logger.TraceInformation($"Finished {nameof(this.ProcessMeetingNotificationEntities)} method of {nameof(MSGraphNotificationProvider)}.", traceProps);
+        }
+
+        /// <summary>
+        /// Validates for all attachments sent.
+        /// </summary>
+        /// <param name="res">HttpResponse object after send attachment request using httpclient.</param>
+        /// <param name="item">Meeting Notification Item object.</param>
+        /// <returns>a boolean value for success/failure.</returns>
+        private static bool IsAllAttachmentsSent(IDictionary<string, ResponseData<string>> res, MeetingNotificationItemEntity item)
+        {
+            if (res == null)
+            {
+                return false;
+            }
+
+            var successResponse = res.Values.Where(a => a.Status == true);
+            return successResponse.Count() == item.Attachments.Count();
+        }
+
         /// <summary>
         /// Processes the notification items as individual tasks.
         /// </summary>
@@ -193,12 +246,27 @@ namespace NotificationService.BusinessLibrary.Providers
                     }
 
                     EmailMessagePayload payLoad = new EmailMessagePayload(message) { SaveToSentItems = saveToSent };
-                    var isSuccess = await this.msGraphProvider.SendEmailNotification(emailAccountUsed.Item1, payLoad, item.NotificationId).ConfigureAwait(false);
-
-                    item.Status = isSuccess ? NotificationItemStatus.Sent : (item.TryCount <= this.maxTryCount ? NotificationItemStatus.Retrying : NotificationItemStatus.Failed);
+                    var response = await this.msGraphProvider.SendEmailNotification(emailAccountUsed.Item1, payLoad, item.NotificationId).ConfigureAwait(false);
+                    if (response.Status)
+                    {
+                        item.Status = NotificationItemStatus.Sent;
+                    }
+                    else if (item.TryCount <= this.maxTryCount && (response.StatusCode == HttpStatusCode.TooManyRequests || response.StatusCode == HttpStatusCode.RequestTimeout))
+                    {
+                        item.Status = NotificationItemStatus.Retrying;
+                        item.ErrorMessage = response.Result;
+                        _ = this.IsMailboxLimitExchausted(response.Result, item.NotificationId, item.EmailAccountUsed, false, traceProps);
+                    }
+                    else
+                    {
+                        this.logger.WriteCustomEvent($"{AIConstants.CustomEventMailSendFailed} for notificationId:  {item.NotificationId} ");
+                        item.Status = NotificationItemStatus.Failed;
+                        item.ErrorMessage = response.Result;
+                    }
                 }
                 catch (AggregateException ex)
                 {
+                    this.logger.WriteCustomEvent($"{AIConstants.CustomEventMailSendFailed} for notificationId:  {item.NotificationId}");
                     item.Status = NotificationItemStatus.Failed;
                     item.ErrorMessage = (ex.InnerException != null) ? ex.InnerException.Message : ex.Message;
                 }
@@ -303,61 +371,17 @@ namespace NotificationService.BusinessLibrary.Providers
                     // Mark these items as queued and Queue them
                     item.Status = NotificationItemStatus.Retrying;
                     item.ErrorMessage = itemResponse?.Error;
-                    if (itemResponse.Error?.Contains("quota was exceeded", StringComparison.InvariantCultureIgnoreCase) ?? false)
-                    {
-                        this.logger.WriteCustomEvent($"Mail Box Exhausted :  {item.EmailAccountUsed} ");
-                        this.logger.TraceInformation($"{itemResponse.Error} Item with notification id={item.NotificationId} will be retried with a different mail box", traceProps);
-                        if (!isAccountIndexIncremented)
-                        {
-                            isAccountIndexIncremented = true;
-                            this.emailAccountManager.IncrementIndex();
-                        }
-                    }
+                    isAccountIndexIncremented = this.IsMailboxLimitExchausted(itemResponse?.Error, item.NotificationId, item.EmailAccountUsed, isAccountIndexIncremented, traceProps);
                 }
                 else
                 {
+                    this.logger.WriteCustomEvent($"{AIConstants.CustomEventMailSendFailed} for notificationId:  {item.NotificationId} ");
                     item.Status = NotificationItemStatus.Failed;
                     item.ErrorMessage = itemResponse?.Error;
                 }
             }
 
             this.logger.TraceInformation($"Finished {nameof(this.ProcessEntitiesInBatch)} method of {nameof(MSGraphNotificationProvider)}.");
-        }
-
-        /// <inheritdoc/>
-        public async Task ProcessMeetingNotificationEntities(string applicationName, IList<MeetingNotificationItemEntity> meetingInviteEntities)
-        {
-            var traceProps = new Dictionary<string, string>();
-            traceProps[AIConstants.Application] = applicationName;
-            this.logger.TraceInformation($"Started {nameof(this.ProcessMeetingNotificationEntities)} method of {nameof(MSGraphNotificationProvider)}.", traceProps);
-            if (meetingInviteEntities is null || meetingInviteEntities.Count == 0)
-            {
-                throw new ArgumentNullException(nameof(meetingInviteEntities), "meetingInviteEntities are null/empty.");
-            }
-
-            traceProps[AIConstants.EmailNotificationCount] = meetingInviteEntities?.Count.ToString(CultureInfo.InvariantCulture);
-            var applicationFromAddress = this.applicationAccounts.Find(a => a.ApplicationName == applicationName).FromOverride;
-            AccountCredential selectedAccountCreds = this.emailAccountManager.FetchAccountToBeUsedForApplication(applicationName, this.applicationAccounts);
-            AuthenticationHeaderValue authenticationHeaderValue = await this.tokenHelper.GetAuthenticationHeaderValueForSelectedAccount(selectedAccountCreds).ConfigureAwait(false);
-            Tuple<AuthenticationHeaderValue, AccountCredential> selectedAccount = new Tuple<AuthenticationHeaderValue, AccountCredential>(authenticationHeaderValue, selectedAccountCreds);
-            this.logger.TraceVerbose($"applicationFromAddress: {applicationFromAddress}", traceProps);
-            meetingInviteEntities.ToList().ForEach(nie => nie.From = applicationFromAddress);
-
-            if (authenticationHeaderValue == null)
-            {
-                foreach (var item in meetingInviteEntities)
-                {
-                    item.Status = NotificationItemStatus.Failed;
-                    item.ErrorMessage = $"Could not retrieve authentication token with selected account:{selectedAccount.Item2?.AccountName} for the application:{applicationName}.";
-                }
-            }
-            else
-            {
-                string emailAccountUsed = selectedAccount.Item2.AccountName;
-                await this.ProcessMeetingEntitiesIndividually(applicationName, meetingInviteEntities, selectedAccount).ConfigureAwait(false);
-            }
-
-            this.logger.TraceInformation($"Finished {nameof(this.ProcessMeetingNotificationEntities)} method of {nameof(MSGraphNotificationProvider)}.", traceProps);
         }
 
         /// <summary>
@@ -367,7 +391,7 @@ namespace NotificationService.BusinessLibrary.Providers
         /// <param name="notificationEntities">List of Meeting Notification Entities to be sent.</param>
         /// <param name="selectedAccount">email account used for sending meeting invites.</param>
         /// <returns>A<see cref="Task"/> representing the result of the asynchronous operation.</returns>
-        private async Task ProcessMeetingEntitiesIndividually(string applicationName, IList<MeetingNotificationItemEntity> notificationEntities, Tuple<AuthenticationHeaderValue, AccountCredential> selectedAccount) 
+        private async Task ProcessMeetingEntitiesIndividually(string applicationName, IList<MeetingNotificationItemEntity> notificationEntities, Tuple<AuthenticationHeaderValue, AccountCredential> selectedAccount)
         {
             var traceProps = new Dictionary<string, string>();
             traceProps[AIConstants.Application] = applicationName;
@@ -432,13 +456,24 @@ namespace NotificationService.BusinessLibrary.Providers
                     }
                     else
                     {
-                        item.Status = item.TryCount <= this.maxTryCount ? NotificationItemStatus.Retrying : NotificationItemStatus.Failed;
+                        if (item.TryCount <= this.maxTryCount && (result.StatusCode == HttpStatusCode.TooManyRequests || result.StatusCode == HttpStatusCode.RequestTimeout))
+                        {
+                            item.Status = NotificationItemStatus.Retrying;
+                            _ = this.IsMailboxLimitExchausted(result.Result, item.NotificationId, item.EmailAccountUsed, false, traceProps);
+                        }
+                        else
+                        {
+                            this.logger.WriteCustomEvent($"{AIConstants.CustomEventInviteSendFailed} for notificationId:  {item.NotificationId} ");
+                            item.Status = NotificationItemStatus.Failed;
+                        }
+
                         item.ErrorMessage = result.Result;
                         this.logger.TraceInformation($"{nameof(this.ProcessMeetingEntitiesIndividually)} of class {nameof(MSGraphNotificationProvider)} : Putting the invite back for next retry. Current request statusCode: {result.StatusCode} for notificationId {item.NotificationId}", traceProps);
                     }
                 }
                 catch (AggregateException ex)
                 {
+                    this.logger.WriteCustomEvent($"{AIConstants.CustomEventInviteSendFailed} for notificationId:  {item.NotificationId}");
                     item.Status = NotificationItemStatus.Failed;
                     item.ErrorMessage = (ex.InnerException != null) ? ex.InnerException.Message : ex.Message;
                 }
@@ -448,7 +483,7 @@ namespace NotificationService.BusinessLibrary.Providers
         }
 
         /// <summary>
-        /// create Payload for Meeting Invite to be set to Graph API. 
+        /// create Payload for Meeting Invite to be set to Graph API.
         /// </summary>
         /// <param name="meetingNotificationEntity"> MeetingNotification Entity Object.</param>
         /// <param name="applicationName">Application Name for the Meeting Invite.</param>
@@ -501,7 +536,7 @@ namespace NotificationService.BusinessLibrary.Providers
                 },
             };
 
-            if ( meetingNotificationEntity.RecurrencePattern != MeetingRecurrencePattern.None )
+            if (meetingNotificationEntity.RecurrencePattern != MeetingRecurrencePattern.None)
             {
                 var recurrencePattern = new RecurrencePattern()
                 {
@@ -526,7 +561,7 @@ namespace NotificationService.BusinessLibrary.Providers
                 };
             }
 
-            payload.ReminderMinutesBeforeStart = Convert.ToInt32(meetingNotificationEntity.ReminderMinutesBeforeStart);
+            payload.ReminderMinutesBeforeStart = Convert.ToInt32(meetingNotificationEntity.ReminderMinutesBeforeStart, CultureInfo.InvariantCulture);
             payload.Start = new InviteDateTime()
             {
                 DateTime = meetingNotificationEntity.Start.FormatDate(ApplicationConstants.GraphMeetingInviteDateTimeFormatter),
@@ -539,15 +574,29 @@ namespace NotificationService.BusinessLibrary.Providers
             return payload;
         }
 
-        private static bool IsAllAttachmentsSent(IDictionary<string, ResponseData<string>> res, MeetingNotificationItemEntity item)
+        /// <summary>
+        /// Logs Event and telemtry for exhausted mailbox.
+        /// </summary>
+        /// <param name="errorMessage">errormessage from http api call.</param>
+        /// <param name="notificationId">unique identifier or notification.</param>
+        /// <param name="mailboxUsed">mailbox used to send notificaiton.</param>
+        /// <param name="isAccountIndexIncremented">to track the index of already exchausted mailbox.</param>
+        /// <param name="traceProps">telemetry properties to be logged.</param>
+        /// <returns>return the update status of already incremented index.</returns>
+        private bool IsMailboxLimitExchausted(string errorMessage, string notificationId, string mailboxUsed, bool isAccountIndexIncremented = false, IDictionary<string, string> traceProps = null)
         {
-            if (res == null)
+            if (errorMessage?.Contains("quota was exceeded", StringComparison.InvariantCultureIgnoreCase) ?? false)
             {
-                return false;
+                this.logger.WriteCustomEvent($"{AIConstants.CustomEventMailBoxExhausted}  for mailbox account :  {mailboxUsed} ");
+                this.logger.TraceInformation($"{errorMessage} Item with notification id={notificationId} will be retried with a different mail box", traceProps);
+                if (!isAccountIndexIncremented)
+                {
+                    isAccountIndexIncremented = true;
+                    this.emailAccountManager.IncrementIndex();
+                }
             }
 
-            var successResponse = res.Values.Where(a => a.Status == true);
-            return successResponse.Count() == item.Attachments.Count();
+            return isAccountIndexIncremented;
         }
     }
 }

@@ -10,12 +10,9 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
     using System.Net.Http.Headers;
     using System.Threading.Tasks;
     using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.Localization.Internal;
-    using Microsoft.Extensions.Options;
     using Moq;
     using Newtonsoft.Json;
-    using NotificationService.BusinessLibrary;
-    using NotificationService.BusinessLibrary.Business.v1;
+    using NotificationService.BusinessLibrary.Business.V1;
     using NotificationService.BusinessLibrary.Interfaces;
     using NotificationService.BusinessLibrary.Providers;
     using NotificationService.Common;
@@ -253,7 +250,7 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(true));
+                .Returns(Task.FromResult(this.response));
 
             _ = this.EmailAccountManager
                 .Setup(ema => ema.FetchAccountToBeUsedForApplication(It.IsAny<string>(), It.IsAny<List<ApplicationAccounts>>()))
@@ -364,7 +361,7 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(true));
+                .Returns(Task.FromResult(this.response));
 
             this.EmailServiceManager = new EmailServiceManager(this.Configuration, this.EmailNotificationRepository.Object, this.CloudStorageClient.Object, this.Logger, this.NotificationProviderFactory.Object, this.EmailManager);
 
@@ -463,7 +460,7 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(true));
+                .Returns(Task.FromResult(this.response));
 
             this.EmailServiceManager = new EmailServiceManager(this.Configuration, this.EmailNotificationRepository.Object, this.CloudStorageClient.Object, this.Logger, this.NotificationProviderFactory.Object, this.EmailManager);
 
@@ -549,7 +546,7 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(true));
+                .Returns(Task.FromResult(this.response));
 
             this.EmailServiceManager = new EmailServiceManager(this.Configuration, this.EmailNotificationRepository.Object, this.CloudStorageClient.Object, this.Logger, this.NotificationProviderFactory.Object, this.EmailManager);
 
@@ -635,7 +632,7 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(true));
+                .Returns(Task.FromResult(this.response));
 
             this.EmailServiceManager = new EmailServiceManager(this.Configuration, this.EmailNotificationRepository.Object, this.CloudStorageClient.Object, this.Logger, this.NotificationProviderFactory.Object, this.EmailManager);
 
@@ -722,7 +719,7 @@ namespace NotificationService.UnitTests.BusinesLibrary.V1.EmailManager
 
             _ = this.MsGraphProvider
                 .Setup(gp => gp.SendEmailNotification(It.IsAny<AuthenticationHeaderValue>(), It.IsAny<EmailMessagePayload>(), It.IsAny<string>()))
-                .Returns(Task.FromResult(true));
+                .Returns(Task.FromResult(this.response));
 
             this.EmailServiceManager = new EmailServiceManager(this.Configuration, this.EmailNotificationRepository.Object, this.CloudStorageClient.Object, this.Logger, this.NotificationProviderFactory.Object, this.EmailManager);
 

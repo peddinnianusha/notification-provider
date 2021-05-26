@@ -6,7 +6,6 @@ namespace NotificationService.FunctionalTests
     using Newtonsoft.Json;
     using NotificationService.Contracts;
     using NUnit.Framework;
-    using System;
     using System.Collections.Generic;
     using System.Linq;
     using System.Net.Http;
@@ -16,6 +15,9 @@ namespace NotificationService.FunctionalTests
     public class EmailNotificationSendTest : BaseTests
     {
         [Test]
+        /// <summary>
+        /// Test email through send endpoint
+        /// </summary>
         public async Task SendEmailTest()
         {
             var emailNotificationItems = new EmailNotificationItem[]
@@ -56,7 +58,7 @@ namespace NotificationService.FunctionalTests
                     Assert.Fail();
                 }
             }
-            
+
         }
 
     }
